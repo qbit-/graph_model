@@ -11,8 +11,15 @@ import os
 import functools
 import itertools
 
-from .base import get_simple_graph, relabel_graph_nodes, eliminate_node
-from .system_defs import LIBRARY_PATH, TAMAKI_SOLVER_PATH, QUICKBB_COMMAND
+if __name__ == "__main__" and __package__ is None:
+    import sys
+    if '..' not in sys.path:
+        sys.path.append('..')
+    __package__ = 'graph_model'
+
+from .base import (get_simple_graph, relabel_graph_nodes,
+                   eliminate_node)
+from .system_defs import (TAMAKI_SOLVER_PATH, QUICKBB_COMMAND)
 
 
 def get_treewidth_from_peo(old_graph, peo):
@@ -305,7 +312,8 @@ def get_upper_bound_peo_pace2017(
 def get_upper_bound_peo_quickbb(
         old_graph,
         wait_time=60,
-        quickbb_extra_args=" --min-fill-ordering ",
+        quickbb_extra_args='',
+        random_start=False,
         input_suffix=None, keep_input=False):
     """
     Calculates the elimination order for an undirected
@@ -317,8 +325,10 @@ def get_upper_bound_peo_quickbb(
             graph of the undirected graphical model to decompose
     wait_time : int, default 60
             waiting time in seconds
-    quickbb_extra_args : str, default '--min-fill-ordering --time 60'
+    quickbb_extra_args : str, default ''
              Optional commands to QuickBB.
+    random_start : bool, default False
+             start with random order or with the minfill order
     input_suffix : str, default None
              Optional suffix to allow parallel execution.
              If None is provided a random suffix is generated
@@ -336,22 +346,29 @@ def get_upper_bound_peo_quickbb(
     from .exporters import generate_cnf_file
 
     # save initial indices to ensure nothing is missed
-    initial_indices = old_graph.nodes()
+    initial_indices = list(old_graph.nodes())
 
     # Remove selfloops and parallel edges. Critical
     graph = get_simple_graph(old_graph)
 
     # Relabel graph nodes to consequtive ints
-    graph, initial_to_conseq = relabel_graph_nodes(
-        graph,
-        dict(zip(graph.nodes, range(1, graph.number_of_nodes()+1))))
+    initial_to_conseq = dict(zip(graph.nodes,
+                                 range(1, graph.number_of_nodes()+1)))
+    graph, conseq_to_initial = relabel_graph_nodes(
+        graph, initial_to_conseq)
+
+    # parse args
+    if not random_start:
+        quickbb_extra_args += ' --min-fill-ordering'
+    else:
+        quickbb_extra_args += ' --random-ordering'
 
     # prepare environment
     if input_suffix is None:
         input_suffix = ''.join(str(random.randint(0, 9))
                                for n in range(8))
     cnffile_abs_path = os.path.join(
-        LIBRARY_PATH, '..', 'output',
+        '/tmp',
         'quickbb.' + input_suffix + '.cnf')
 
     cnffile_dirname = os.path.dirname(cnffile_abs_path)
@@ -360,23 +377,17 @@ def get_upper_bound_peo_quickbb(
     if graph.number_of_edges() > 0:
         generate_cnf_file(graph, cnffile_abs_path)
 
-        quickbb_rel_path = os.path.relpath(
-            QUICKBB_COMMAND, cnffile_dirname)
         out_bytes = run_quickbb(
             cnffile, wait_time=wait_time,
-            command=quickbb_rel_path,
-            cwd=cnffile_dirname)
+            command=QUICKBB_COMMAND,
+            cwd=cnffile_dirname,
+            extra_args=quickbb_extra_args)
 
         # Extract order
         m = re.search(b'(?P<peo>(\d+ )+).*Treewidth=(?P<treewidth>\s\d+)',
                       out_bytes, flags=re.MULTILINE | re.DOTALL)
 
         peo = [int(ii) for ii in m['peo'].split()]
-
-        # Map peo back to original indices. PEO in QuickBB is 1-based
-        # but we need it 0-based
-        peo = [initial_to_conseq[pp] for pp in peo]
-
         treewidth = int(m['treewidth'])
     else:
         peo = []
@@ -387,18 +398,18 @@ def get_upper_bound_peo_quickbb(
     # scaling and may be added to the end of the variables list)
     # and something else
 
-    isolated_nodes = nx.isolates(old_graph)
-    peo = peo + sorted(isolated_nodes, key=int)
+    isolated_nodes = nx.isolates(graph)
+    peo = peo + sorted(isolated_nodes)
 
     # assert(set(initial_indices) - set(peo) == set())
-    missing_indices = set(initial_indices)-set(peo)
+    missing_indices = set(graph.nodes())-set(peo)
     # The next line needs review. Why quickBB misses some indices?
     # It is here to make program work, but is it an optimal order?
-    peo = peo + sorted(list(missing_indices), key=int)
+    peo = peo + sorted(missing_indices)
 
-    # Ensure no indices were missed
-    assert(sorted(peo, key=int) == sorted(initial_indices, key=int))
-    # log.info('Final peo from quickBB:\n{}'.format(peo))
+    # Map peo back to original indices. PEO in QuickBB is 1-based
+    # but we need it 0-based or being other objects
+    peo = [conseq_to_initial[pp] for pp in peo]
 
     # remove input file to honor EPA
     if not keep_input:
@@ -488,9 +499,8 @@ def get_peo(old_graph, method="tamaki"):
 
 def test_method(method=get_upper_bound_peo_builtin):
     """
-    Tests minfill heuristic using quickbb algorithm
+    Tests heuristics
     """
-    from .generators import generate_erdos_graph
 
     # Test 1: path graph with treewidth 1
     print('Test 1. Path graph')
@@ -512,9 +522,9 @@ def test_method(method=get_upper_bound_peo_builtin):
     print(f'treewidth: {tw1}, reference: {tw2}')
     print(f'      peo: {peo1}\nreference: {peo2}')
 
-    # Test 3: complicated graphs with indefinite treewidth
-    print('Test 3. Probabilistic graph')
-    graph = nx.generators.erdos_renyi_graph(50, 0.5)
+    # test 3: grid graphs with treewith equal to the side length
+    print('Test 3. Grid graph')
+    graph = nx.grid_graph([4, 4])
 
     peo1, tw1 = method(
         graph)
