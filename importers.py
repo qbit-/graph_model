@@ -144,9 +144,6 @@ def read_td_file(file_or_data, as_data=False, compressed=False):
     clique_dict = {}
     clique_patt = re.compile('^(\s*b\s+)(?P<clique_idx>\d+)(?P<clique>( \d+)*)')
     for nn, line in zip(range(n, n+n_cliques), datafile):
-        m = re.search(comment_patt, line)
-        if m is not None:
-            continue
         m = re.search(clique_patt, line)
         if m is None:
             raise ValueError(f'File format error at line {nn}:\n'
@@ -158,9 +155,6 @@ def read_td_file(file_or_data, as_data=False, compressed=False):
     # search for the edges between cliques
     edge_patt = re.compile('^(\s*e\s+)?(?P<u>\d+)\s+(?P<v>\d+)')
     for nnn, line in enumerate(datafile, nn):
-        m = re.search(comment_patt, line)
-        if m is not None:
-            continue
         m = re.search(edge_patt, line)
         if m is None:
             raise ValueError(f'File format error at line {nnn}:\n'
