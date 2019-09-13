@@ -88,3 +88,45 @@ def generate_cnf_file(graph, filename="", compressed=False):
         return None
     else:
         return data
+
+
+def generate_dgf_file(graph, filename="", compressed=False):
+    """
+    Generate a dgf format input file for the graph.
+    This function ALWAYS expects a simple Graph without self loops
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+           Undirected graphical model
+    filename : str
+           Output file name. If not specified,
+           the contents are returned as a string
+    compressed : bool
+           if output data should be compressed
+    Returns
+    -------
+    data: str or bytes or None
+    """
+    v = graph.number_of_nodes()
+    e = graph.number_of_edges()
+
+    data = "c a configuration of the graph\n"
+    data += f"p {v} {e}\n"
+
+    for edge in graph.edges():
+        u, v = edge
+        # print only if this is not a self-loop
+        # Node numbering in this format is 1-based
+        if u != v:
+            data += 'e {} {}\n'.format(int(u), int(v))
+
+    if compressed:
+        data = lzma.compress(data.encode(ENCODING))
+
+    if len(filename) > 0:
+        with open(filename, 'w+') as fp:
+            fp.write(data)
+        return None
+    else:
+        return data
