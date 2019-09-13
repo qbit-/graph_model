@@ -25,5 +25,5 @@ _tamaki_solver_path = os.path.abspath(
 if os.path.isdir(_tamaki_solver_path):
     TAMAKI_SOLVER_PATH = _tamaki_solver_path
 else:
-    raise
     TAMAKI_SOLVER_PATH = None
+    raise FileNotFoundError('Tamaki solver not found')
