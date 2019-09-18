@@ -202,7 +202,7 @@ def get_node_max_cardinality_heuristic(graph, randomize=False):
     return node, degree
 
 
-def get_upper_bound_peo_builtin(old_graph, method="min_fill"):
+def get_upper_bound_peo_builtin(old_graph, method="min_fill", randomize=False):
     """
     Calculates an upper bound on treewidth using one of the
     heuristics.
@@ -217,6 +217,10 @@ def get_upper_bound_peo_builtin(old_graph, method="min_fill"):
            graph to estimate
     method : str
            one of {"min_fill", "min_degree", "cardinality"}
+
+    randomize : bool, default False
+                if a node is selected at random among
+                nodes with the same score in greedy policy
 
     Returns
     -------
@@ -241,7 +245,7 @@ def get_upper_bound_peo_builtin(old_graph, method="min_fill"):
     # Remove selfloops and parallel edges. Critical
     graph = get_simple_graph(graph)
 
-    node, max_degree = node_heuristic_fn(graph)
+    node, max_degree = node_heuristic_fn(graph, randomize=randomize)
     peo = [node]
     eliminate_node(graph, node, self_loops=False)
 
