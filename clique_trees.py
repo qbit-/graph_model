@@ -7,6 +7,13 @@ original
 """
 import networkx as nx
 import copy
+import itertools
+
+if __name__ == "__main__" and __package__ is None:
+    import sys
+    if '..' not in sys.path:
+        sys.path.append('..')
+    __package__ = 'graph_model'
 
 from .peo_calculation import (get_treewidth_from_peo)
 
@@ -66,7 +73,10 @@ def prune_tree(tree, start_edge):
                         (right, neighbor))
 
     for edge in tree.edges():
-        del tree.edges[edge]['visited']
+        try:
+            del tree.edges[edge]['visited']
+        except KeyError:
+            continue
 
 
 def get_fillin_graph(old_graph, peo):
@@ -90,7 +100,7 @@ def get_fillin_graph(old_graph, peo):
                 triangulated graph
     """
     # Ensure PEO is a list of ints
-    peo = list(map(int, peo))
+    #peo = list(map(int, peo))
     peo_to_conseq = dict(zip(peo, range(len(peo))))
 
     number_of_nodes = len(peo)
@@ -133,7 +143,7 @@ def get_fillin_graph(old_graph, peo):
     return graph
 
 
-def get_tree_from_peo(graph_old, peo):
+def get_tree_from_peo_old(graph_old, peo):
     """
     Returns a tree decomposition of the graph,
     which corresponds to the given peo.
@@ -193,6 +203,65 @@ def get_tree_from_peo(graph_old, peo):
         prune_tree(tree, start_edge)
 
     assert len(list(tree.selfloop_edges())) == 0
+    return tree
+
+
+def get_tree_from_peo(graph_old, peo):
+    """
+    This function directly produces a tree decomposition
+    of a graph given an elimination order
+
+    Parameters
+    ----------
+    graph: networkx.Graph
+           Input graph
+    peo: list
+           Permutation order of vertices
+    """
+    # import pdb
+    # pdb.set_trace()
+
+    graph = copy.deepcopy(graph_old)
+    node_to_index = dict(zip(peo, range(len(peo))))
+    leaf_bags = []
+
+    tree = nx.Graph()
+
+    for node_idx, node in enumerate(peo):
+        # build a chordal graph along the way
+        ancestors = [neighbor for neighbor in graph.neighbors(node)
+                     if node_to_index[neighbor] > node_idx]
+        graph.add_edges_from(itertools.combinations(ancestors, 2))
+
+        if len(ancestors) > 0:
+            bag = frozenset(ancestors + [node])
+        else:
+            continue  # no bag for a single node (root)
+
+        drop_bag = False
+        for leaf in leaf_bags:
+            if bag.issubset(leaf):
+                drop_bag = True  # drop bags which are not maximal cliques
+                bag = leaf
+                break
+
+        drop_leafs = []
+        for leaf_idx, leaf in enumerate(leaf_bags):
+            if (node in bag.intersection(leaf)
+                and not bag.issubset(leaf)):
+                # bag is an ancestor of this leaf
+                # we also avoid a selfloop in the condition
+                tree.add_edge(leaf, bag)
+                drop_leafs.append(leaf_idx)
+
+        for leaf_idx in sorted(drop_leafs, reverse=True):
+            leaf_bags.pop(leaf_idx)
+        if not drop_bag:
+            leaf_bags.append(bag)
+            # add a node if it was not introduced with edge
+            # (support isolates)
+            tree.add_node(bag)
+
     return tree
 
 
@@ -563,6 +632,47 @@ def are_subtrees_connected(tree, elements):
             raise ValueError(f"Subtree of {element} not connected!")
 
 
+def are_all_nodes_covered(tree, elements):
+    """
+    Checks if all elements are contained in the tree
+    """
+    all_tree_elements = set()
+    set_elements = set(elements)
+    for bag in tree.nodes():
+        all_tree_elements = all_tree_elements.union(bag)
+    if not set_elements.issubset(all_tree_elements):
+        raise ValueError('Elements {} are not covered'.format(
+            set_elements.difference(all_tree_elements)
+        ))
+
+
+def are_all_edges_covered(tree, edges):
+    """
+    Checks if every edge in the list is contained in some bag
+    """
+    for edge in edges:
+        edge_in_bag = False
+        set_edge = set(edge)
+        for bag in tree.nodes():
+            if set_edge.issubset(bag):
+                edge_in_bag = True
+                break
+        if not edge_in_bag:
+            raise ValueError(f'Edge {edge} is not in the tree')
+
+
+def test_tree_from_peo():
+    g, peo = make_test_graph()
+    f = get_tree_from_peo(g, peo)
+    are_all_nodes_covered(f, g.nodes())
+    are_all_edges_covered(f, g.edges())
+    are_subtrees_connected(f, g.nodes())
+
+    tw1 = get_treewidth_from_peo(g, peo)
+    tw2 = len(find_max_clique(f)) - 1
+    assert tw1 == tw2
+
+
 def test_tree_reduction():
     """
     Tests the deletion of variables from tree
@@ -596,5 +706,6 @@ def test_tree_to_peo():
 
 
 if __name__ == '__main__':
+    test_tree_from_peo()
     test_tree_reduction()
     test_tree_to_peo()
