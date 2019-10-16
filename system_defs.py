@@ -5,7 +5,7 @@ import numpy as np
 import os
 
 LIBRARY_PATH = os.path.dirname((os.path.abspath(__file__)))
-THIRDPARTY_PATH = os.path.join(LIBRARY_PATH, '..', 'thirdparty')
+THIRDPARTY_PATH = os.path.abspath(os.path.join(LIBRARY_PATH, '..', 'thirdparty'))
 
 # Check for QuickBB
 _quickbb_path = os.path.abspath(

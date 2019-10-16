@@ -96,13 +96,13 @@ def draw_graph(graph, filename=''):
     """
     import matplotlib.pyplot as plt
 
-    plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(7, 7))
     pos = nx.kamada_kawai_layout(graph)
     # pos = nx.spectral_layout(graph)
 
     try:
         node_color = list(map(int, graph.nodes()))
-    except TypeError:
+    except ValueError:
         node_color = list(range(graph.number_of_nodes()))
 
     nx.draw(graph, pos,
